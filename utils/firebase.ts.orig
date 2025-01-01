@@ -1,0 +1,217 @@
+import { initializeApp } from 'firebase/app';
+import { GoogleAuthProvider, getAuth, signInWithPopup, signOut } from 'firebase/auth';
+import {
+	getFirestore,
+	query,
+	getDoc,
+	getDocs,
+	deleteDoc,
+	collection,
+	writeBatch,
+	where,
+	addDoc,
+	updateDoc,
+	serverTimestamp,
+	doc,
+	orderBy,
+} from 'firebase/firestore';
+import { getRemoteConfig, getValue, fetchAndActivate } from 'firebase/remote-config';
+
+import { generateKey } from './generator';
+
+const firebaseConfig = {
+	apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
+	authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+	projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+	storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+	messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+	appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
+	measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID,
+};
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+const remoteConfig = getRemoteConfig(app);
+remoteConfig.settings.minimumFetchIntervalMillis = 3600000;
+
+const googleProvider = new GoogleAuthProvider();
+const { stringify } = require('csv-stringify/sync');
+
+// TODO: Handle users other than owner
+const signInWithGoogle = async () => {
+	try {
+		const res = await signInWithPopup(auth, googleProvider);
+		const googleUser = res.user;
+		// const dbQuery = query(collection(db, 'owner_logins'), where('email', '==', googleUser.email));
+
+		// const user = await getDocs(dbQuery);
+		// if (!user.docs[0]) {
+		// 	console.log('No user found');
+		// 	auth.signOut();
+		// 	return false;
+		// }
+		// console.log({ docs: user.docs[0].data() });
+
+		const isAdmin = await checkAdmin(googleUser.email || '');
+		if (!isAdmin) {
+			console.log('User is not an admin');
+			auth.signOut();
+			return false;
+		}
+
+		return true;
+	} catch (err: any) {
+		console.error(err);
+	}
+};
+
+const logout = async () => {
+	try {
+		console.log('Logging out');
+		await signOut(auth);
+	} catch (err: any) {
+		console.error(err);
+		alert(err.message);
+	}
+};
+
+<<<<<<< HEAD
+async function fetchNewKeys(numKeys: number) {
+	const url = 'https://us-central1-bugwanakeys.cloudfunctions.net/app/generateKeys';
+	const response = await fetch(url, {
+		method: 'POST',
+		headers: {
+			'Content-Type': 'application/json',
+		},
+		body: JSON.stringify({ numKeys }),
+	});
+	const data = await response.json();
+	const keys = data.keyIds;
+	return keys;
+}
+
+async function generateNKeyAppSumo(n: number): Promise<{ license_key: string }[]> {
+	let keys: { license_key: string }[] = [];
+	try {
+		// Generate keys
+		const newKeys = await fetchNewKeys(n);
+		for (let i = 0; i < n; i++) {
+			const insertionObject = {
+				date_created: serverTimestamp(),
+				license_key: newKeys[i],
+				license_type: 'App_Sumo_5_site',
+			};
+
+			keys.push({
+				license_key: insertionObject.license_key,
+			});
+		}
+
+		const keysToReturn = keys.map((key) => {
+			return { license_key: key.license_key };
+		});
+
+		const chunks = [];
+		while (keys.length > 0) {
+			chunks.push(keys.splice(0, 500));
+		}
+
+		const batchPromises = chunks.map(async (chunk) => {
+			const batch = writeBatch(db);
+			const keysRef = collection(db, 'keys');
+			chunk.forEach((key) => {
+				addDoc(keysRef, {
+					date_created: serverTimestamp(),
+					license_key: key.license_key,
+					license_type: 'App_Sumo_5_site',
+				});
+			});
+			await batch.commit();
+			console.log('Batched write completed');
+		});
+
+		await Promise.all(batchPromises);
+
+		return keysToReturn;
+	} catch (err) {
+		console.log(err);
+		return [];
+	}
+}
+
+async function generateNumbersReport() {
+	const keysCollection = collection(db, 'keys');
+	const keysDocs = await getDocs(keysCollection);
+	const keys = keysDocs.docs.map((doc) => doc.data());
+
+	console.log({ keys });
+	const reports = keys.map((key) => {
+		// ? Which ever format preferred
+		// return { ...key, date_created: key.date_created.toDate().toDateString() };
+
+		return {
+			...key,
+			date_created: key.date_created.toDate().toLocaleString(),
+		};
+	});
+	return reports;
+=======
+async function generateNKeyAppSumo(
+  n: number
+): Promise<{ license_key: string }[]> {
+  let keys: { license_key: string }[] = [];
+  try {//TODO:use generateKey endpoint to generate keys
+
+    return keys;
+  } catch (err) {
+    console.log(err);
+    return [];
+  }
+}
+
+async function generateNumbersReport() {
+  const keysCollection = collection(db, "keys");
+  const keysDocs = await getDocs(keysCollection);
+  const keys = keysDocs.docs.map((doc) => ({
+    ...doc.data(),
+    date_created: doc.data().date_created.toDate().toLocaleString(),
+    site_1_timestamp: doc.data().site_1_timestamp ? doc.data().site_1_timestamp.toDate().toLocaleString() : "",
+    site_2_timestamp: doc.data().site_2_timestamp ? doc.data().site_2_timestamp.toDate().toLocaleString() : "",
+    site_3_timestamp: doc.data().site_3_timestamp ? doc.data().site_3_timestamp.toDate().toLocaleString() : "",
+    site_4_timestamp: doc.data().site_4_timestamp ? doc.data().site_4_timestamp.toDate().toLocaleString() : "",
+    site_5_timestamp: doc.data().site_5_timestamp ? doc.data().site_5_timestamp.toDate().toLocaleString() : "",
+  }));
+
+  const columns = [
+    { key: 'license_key', header: 'License Key' },
+    { key: 'date_created', header: 'Date Created' },
+    { key: 'license_type', header: 'License Type' },
+    { key: 'site_1', header: 'Site 1' },
+    { key: 'site_1_timestamp', header: 'Site 1 Timestamp' },
+    { key: 'site_2', header: 'Site 2' },
+    { key: 'site_2_timestamp', header: 'Site 2 Timestamp' },
+    { key: 'site_3', header: 'Site 3' },
+    { key: 'site_3_timestamp', header: 'Site 3 Timestamp' },
+    { key: 'site_4', header: 'Site 4' },
+    { key: 'site_4_timestamp', header: 'Site 4 Timestamp' },
+    { key: 'site_5', header: 'Site 5' },
+    { key: 'site_5_timestamp', header: 'Site 5 Timestamp' },
+  ];
+
+  const csv = stringify(keys, { header: true, columns: columns });
+  console.log(csv);
+  return csv;
+>>>>>>> dev
+}
+
+async function checkAdmin(email: string) {
+	await fetchAndActivate(remoteConfig);
+	// Type any because default type did not have _value
+	const owner_logins: any = getValue(remoteConfig, 'owner_logins');
+	const emails = JSON.parse(owner_logins._value);
+	console.log({ emails });
+	return emails.includes(email) || email === 'shameekh2002@gmail.com';
+}
+
+export { auth, db, signInWithGoogle, logout, generateNKeyAppSumo, generateNumbersReport };
